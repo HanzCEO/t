@@ -28,7 +28,7 @@ class TaskWidget(Static):
     
     def on_click(self) -> None:
         """Handle task click for editing"""
-        self.app.push_screen(EditTaskScreen(self.task_data))
+        self.app.push_screen(EditTaskScreen(task=self.task_data))
 
 
 class KanbanColumn(Container):
