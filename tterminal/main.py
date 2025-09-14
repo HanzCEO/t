@@ -18,17 +18,17 @@ class TaskWidget(Static):
     
     def __init__(self, task: Task, **kwargs):
         super().__init__(**kwargs)
-        self.task = task
+        self.task_data = task
         self.can_focus = True
     
     def render(self) -> str:
         """Render the task"""
-        priority_indicator = "●" if self.task.priority != Priority.NOT_URGENT_NOT_IMPORTANT else "○"
-        return f"[{self.task.priority.color}]{priority_indicator}[/] {self.task.title}"
+        priority_indicator = "●" if self.task_data.priority != Priority.NOT_URGENT_NOT_IMPORTANT else "○"
+        return f"[{self.task_data.priority.color}]{priority_indicator}[/] {self.task_data.title}"
     
     def on_click(self) -> None:
         """Handle task click for editing"""
-        self.app.push_screen(EditTaskScreen(self.task))
+        self.app.push_screen(EditTaskScreen(self.task_data))
 
 
 class KanbanColumn(Container):
@@ -308,6 +308,10 @@ class TodoApp(App):
             return
             
         self._last_task_count = current_task_count
+        
+        # Check if columns exist (app might not be fully mounted yet)
+        if not hasattr(self, 'todo_column') or not hasattr(self, 'doing_column') or not hasattr(self, 'done_column'):
+            return
         
         # Clear all columns
         self.todo_column.clear_tasks()
