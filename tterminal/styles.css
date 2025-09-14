@@ -32,10 +32,11 @@ Screen {
 
 .task-item {
     border: solid $secondary;
-    margin: 1 0;
-    padding: 1;
+    margin: 0 0 1 0;
+    padding: 0 1;
     background: $surface;
     color: $text;
+    height: 3;
 }
 
 .task-item:hover {
@@ -46,6 +47,12 @@ Screen {
 .task-item:focus {
     border: solid $warning;
     background: $warning 10%;
+}
+
+.task-item.dragging {
+    background: $primary 20%;
+    border: solid $primary;
+    opacity: 80%;
 }
 
 /* Modal styles */

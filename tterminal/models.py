@@ -4,7 +4,7 @@ Data models for the TODO list application
 
 from dataclasses import dataclass, asdict, field
 from enum import Enum
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 import json
 import os
@@ -55,6 +55,7 @@ class Task:
     status: Status = Status.TODO
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
+    deadline: Optional[datetime] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert task to dictionary for serialization"""
@@ -63,6 +64,7 @@ class Task:
         data['status'] = self.status.value
         data['created_at'] = self.created_at.isoformat()
         data['updated_at'] = self.updated_at.isoformat()
+        data['deadline'] = self.deadline.isoformat() if self.deadline else None
         return data
     
     @classmethod
@@ -72,6 +74,7 @@ class Task:
         data['status'] = Status(data['status'])
         data['created_at'] = datetime.fromisoformat(data['created_at'])
         data['updated_at'] = datetime.fromisoformat(data['updated_at'])
+        data['deadline'] = datetime.fromisoformat(data['deadline']) if data.get('deadline') else None
         return cls(**data)
     
     def update(self, **kwargs):
@@ -159,6 +162,16 @@ class TaskManager:
     def sort_tasks_by_date(self, tasks: List[Task], reverse: bool = True) -> List[Task]:
         """Sort tasks by creation date"""
         return sorted(tasks, key=lambda t: t.created_at, reverse=reverse)
+    
+    def sort_tasks_by_deadline(self, tasks: List[Task]) -> List[Task]:
+        """Sort tasks by deadline (tasks with no deadline go to the end)"""
+        def deadline_key(task):
+            if task.deadline is None:
+                # Use a date far in the future for tasks without deadlines
+                return datetime.max
+            return task.deadline
+        
+        return sorted(tasks, key=deadline_key)
     
     def force_save(self):
         """Force save all pending changes"""

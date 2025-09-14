@@ -3,6 +3,7 @@ Main TUI application using Textual
 """
 
 import uuid
+from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Header, Footer, Static, Button, Input, TextArea, Select
@@ -24,7 +25,24 @@ class TaskWidget(Static):
     def render(self) -> str:
         """Render the task"""
         priority_indicator = "●" if self.task_data.priority != Priority.NOT_URGENT_NOT_IMPORTANT else "○"
-        return f"[{self.task_data.priority.color}]{priority_indicator}[/] {self.task_data.title}"
+        
+        # Format task with optional deadline
+        task_text = f"[{self.task_data.priority.color}]{priority_indicator}[/] {self.task_data.title}"
+        
+        # Add deadline info if present
+        if self.task_data.deadline:
+            deadline_str = self.task_data.deadline.strftime("%m/%d")
+            # Check if deadline is soon (within 3 days) or overdue
+            days_until = (self.task_data.deadline.date() - datetime.now().date()).days
+            if days_until < 0:
+                deadline_str = f"[red]⚠{deadline_str}[/]"  # Overdue
+            elif days_until <= 3:
+                deadline_str = f"[yellow]{deadline_str}[/]"  # Due soon
+            else:
+                deadline_str = f"[dim]{deadline_str}[/]"  # Normal
+            task_text += f" [{deadline_str}]"
+        
+        return task_text
     
     def on_click(self) -> None:
         """Handle task click for editing"""
@@ -73,6 +91,8 @@ class NewTaskScreen(ModalScreen[Task]):
             yield Input(placeholder="Task title (required)", id="title-input")
             yield Static("Description:")
             yield TextArea("", id="description-input")
+            yield Static("Deadline (optional, YYYY-MM-DD):")
+            yield Input(placeholder="2024-12-31", id="deadline-input")
             yield Static("[bold]Priority (Eisenhower Matrix)[/]")
             yield Select([
                 ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
@@ -95,6 +115,7 @@ class NewTaskScreen(ModalScreen[Task]):
         """Create a new task"""
         title_input = self.query_one("#title-input", Input)
         description_input = self.query_one("#description-input", TextArea)
+        deadline_input = self.query_one("#deadline-input", Input)
         priority_select = self.query_one("#priority-select", Select)
         
         title = title_input.value.strip()
@@ -104,11 +125,22 @@ class NewTaskScreen(ModalScreen[Task]):
         description = description_input.text.strip()
         priority = priority_select.value
         
+        # Parse deadline if provided
+        deadline = None
+        deadline_str = deadline_input.value.strip()
+        if deadline_str:
+            try:
+                deadline = datetime.strptime(deadline_str, "%Y-%m-%d")
+            except ValueError:
+                # Invalid date format, ignore it
+                pass
+        
         task = Task(
             id=str(uuid.uuid4()),
             title=title,
             description=description,
-            priority=priority
+            priority=priority,
+            deadline=deadline
         )
         
         # Add to task manager
@@ -133,11 +165,15 @@ class EditTaskScreen(ModalScreen[Task]):
     
     def compose(self) -> ComposeResult:
         """Compose the edit task screen"""
+        deadline_str = self._task_obj.deadline.strftime("%Y-%m-%d") if self._task_obj.deadline else ""
+        
         with Container(classes="modal"):
             yield Static("[bold]Edit Task[/]", classes="modal-title")
             yield Input(value=self._task_obj.title, id="title-input")
             yield Static("Description:")
             yield TextArea(self._task_obj.description, id="description-input")
+            yield Static("Deadline (optional, YYYY-MM-DD):")
+            yield Input(value=deadline_str, placeholder="2024-12-31", id="deadline-input")
             yield Static("[bold]Priority[/]")
             yield Select([
                 ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
@@ -169,6 +205,7 @@ class EditTaskScreen(ModalScreen[Task]):
         """Save task changes"""
         title_input = self.query_one("#title-input", Input)
         description_input = self.query_one("#description-input", TextArea)
+        deadline_input = self.query_one("#deadline-input", Input)
         priority_select = self.query_one("#priority-select", Select)
         status_select = self.query_one("#status-select", Select)
         
@@ -176,13 +213,24 @@ class EditTaskScreen(ModalScreen[Task]):
         if not title:
             return  # Don't save empty titles
         
+        # Parse deadline if provided
+        deadline = None
+        deadline_str = deadline_input.value.strip()
+        if deadline_str:
+            try:
+                deadline = datetime.strptime(deadline_str, "%Y-%m-%d")
+            except ValueError:
+                # Invalid date format, keep existing deadline
+                deadline = self._task_obj.deadline
+        
         # Update the task
         self.app.task_manager.update_task(
             self._task_obj.id,
             title=title,
             description=description_input.text.strip(),
             priority=priority_select.value,
-            status=status_select.value
+            status=status_select.value,
+            deadline=deadline
         )
         
         # Refresh the main screen
@@ -235,10 +283,11 @@ class TodoApp(App):
     
     .task-item {
         border: solid $secondary;
-        margin: 1 0;
-        padding: 1;
+        margin: 0 0 1 0;
+        padding: 0 1;
         background: $surface;
         color: $text;
+        height: 3;
     }
     
     .task-item:hover {
@@ -249,6 +298,12 @@ class TodoApp(App):
     .task-item:focus {
         border: solid $warning;
         background: $warning 10%;
+    }
+    
+    .task-item.dragging {
+        background: $primary 20%;
+        border: solid $primary;
+        opacity: 80%;
     }
     
     /* Form elements */
@@ -269,12 +324,14 @@ class TodoApp(App):
         Binding("n", "new_task", "New Task"),
         Binding("escape", "focus_board", "Focus Board"),
         Binding("s", "toggle_sort", "Toggle Sort"),
+        Binding("left", "move_task_left", "Move Left"),
+        Binding("right", "move_task_right", "Move Right"),
     ]
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.task_manager = TaskManager()
-        self.sort_by_priority = True  # Default sorting
+        self.sort_mode = "priority"  # "priority", "date", "deadline"
         self._last_task_count = 0  # Cache for performance
     
     def compose(self) -> ComposeResult:
@@ -322,10 +379,12 @@ class TodoApp(App):
         for status in Status:
             tasks = self.task_manager.get_tasks_by_status(status)
             
-            if self.sort_by_priority:
+            if self.sort_mode == "priority":
                 tasks = self.task_manager.sort_tasks_by_priority(tasks)
-            else:
+            elif self.sort_mode == "date":
                 tasks = self.task_manager.sort_tasks_by_date(tasks)
+            elif self.sort_mode == "deadline":
+                tasks = self.task_manager.sort_tasks_by_deadline(tasks)
             
             # Add to appropriate column
             if status == Status.TODO:
@@ -351,11 +410,50 @@ class TodoApp(App):
         # If modals are open, this action will be handled by the modal screens themselves
     
     def action_toggle_sort(self) -> None:
-        """Toggle between priority and date sorting"""
-        self.sort_by_priority = not self.sort_by_priority
+        """Toggle between priority, date, and deadline sorting"""
+        if self.sort_mode == "priority":
+            self.sort_mode = "date"
+        elif self.sort_mode == "date":
+            self.sort_mode = "deadline"
+        else:
+            self.sort_mode = "priority"
+        
         self.refresh_tasks(force=True)
-        sort_type = "priority" if self.sort_by_priority else "date"
-        self.notify(f"Sorting by {sort_type}")
+        self.notify(f"Sorting by {self.sort_mode}")
+    
+    def action_move_task_left(self) -> None:
+        """Move focused task to the left column"""
+        focused = self.focused
+        if isinstance(focused, TaskWidget):
+            task = focused.task_data
+            new_status = None
+            
+            if task.status == Status.DONE:
+                new_status = Status.DOING
+            elif task.status == Status.DOING:
+                new_status = Status.TODO
+            
+            if new_status:
+                self.task_manager.update_task(task.id, status=new_status)
+                self.refresh_tasks(force=True)
+                self.notify(f"Moved '{task.title}' to {new_status.value.upper()}")
+    
+    def action_move_task_right(self) -> None:
+        """Move focused task to the right column"""
+        focused = self.focused
+        if isinstance(focused, TaskWidget):
+            task = focused.task_data
+            new_status = None
+            
+            if task.status == Status.TODO:
+                new_status = Status.DOING
+            elif task.status == Status.DOING:
+                new_status = Status.DONE
+            
+            if new_status:
+                self.task_manager.update_task(task.id, status=new_status)
+                self.refresh_tasks(force=True)
+                self.notify(f"Moved '{task.title}' to {new_status.value.upper()}")
 
 
 def main():
