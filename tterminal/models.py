@@ -94,6 +94,7 @@ class TaskManager:
         
         self.data_file = data_file
         self.tasks: List[Task] = []
+        self._pending_save = False  # Track if we need to save
         self.load_tasks()
     
     def load_tasks(self):
@@ -107,15 +108,24 @@ class TaskManager:
                 # If file is corrupted, start fresh
                 self.tasks = []
     
-    def save_tasks(self):
-        """Save tasks to file"""
-        data = [task.to_dict() for task in self.tasks]
-        with open(self.data_file, 'w') as f:
-            json.dump(data, f, indent=2)
+    def save_tasks(self, force: bool = False):
+        """Save tasks to file (only if there are pending changes or forced)"""
+        if not self._pending_save and not force:
+            return
+            
+        try:
+            data = [task.to_dict() for task in self.tasks]
+            with open(self.data_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            self._pending_save = False
+        except Exception:
+            # If save fails, keep the pending flag
+            pass
     
     def add_task(self, task: Task):
         """Add a new task"""
         self.tasks.append(task)
+        self._pending_save = True
         self.save_tasks()
     
     def get_task(self, task_id: str) -> Task:
@@ -129,15 +139,17 @@ class TaskManager:
         """Update a task"""
         task = self.get_task(task_id)
         task.update(**kwargs)
+        self._pending_save = True
         self.save_tasks()
     
     def delete_task(self, task_id: str):
         """Delete a task"""
         self.tasks = [task for task in self.tasks if task.id != task_id]
+        self._pending_save = True
         self.save_tasks()
     
     def get_tasks_by_status(self, status: Status) -> List[Task]:
-        """Get tasks by status"""
+        """Get tasks by status (returns a copy to avoid external modifications)"""
         return [task for task in self.tasks if task.status == status]
     
     def sort_tasks_by_priority(self, tasks: List[Task]) -> List[Task]:
@@ -147,3 +159,7 @@ class TaskManager:
     def sort_tasks_by_date(self, tasks: List[Task], reverse: bool = True) -> List[Task]:
         """Sort tasks by creation date"""
         return sorted(tasks, key=lambda t: t.created_at, reverse=reverse)
+    
+    def force_save(self):
+        """Force save all pending changes"""
+        self.save_tasks(force=True)

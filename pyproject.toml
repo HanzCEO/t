@@ -37,6 +37,7 @@ Repository = "https://github.com/HanzCEO/t"
 
 [project.scripts]
 tterminal = "tterminal.main:main"
+t = "tterminal.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

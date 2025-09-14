@@ -115,7 +115,7 @@ class NewTaskScreen(ModalScreen[Task]):
         self.app.task_manager.add_task(task)
         
         # Refresh the main screen
-        self.app.refresh_tasks()
+        self.app.refresh_tasks(force=True)
         
         self.dismiss()
 
@@ -186,14 +186,14 @@ class EditTaskScreen(ModalScreen[Task]):
         )
         
         # Refresh the main screen
-        self.app.refresh_tasks()
+        self.app.refresh_tasks(force=True)
         
         self.dismiss()
     
     def delete_task(self):
         """Delete the task"""
         self.app.task_manager.delete_task(self.task.id)
-        self.app.refresh_tasks()
+        self.app.refresh_tasks(force=True)
         self.dismiss()
 
 
@@ -305,6 +305,7 @@ class TodoApp(App):
         super().__init__(**kwargs)
         self.task_manager = TaskManager()
         self.sort_by_priority = True  # Default sorting
+        self._last_task_count = 0  # Cache for performance
     
     def compose(self) -> ComposeResult:
         """Compose the main application"""
@@ -324,8 +325,20 @@ class TodoApp(App):
         """Called when app is mounted"""
         self.refresh_tasks()
     
-    def refresh_tasks(self):
-        """Refresh all tasks in the kanban board"""
+    def on_unmount(self) -> None:
+        """Called when app is unmounted - ensure data is saved"""
+        self.task_manager.force_save()
+    
+    def refresh_tasks(self, force: bool = False):
+        """Refresh all tasks in the kanban board (with performance optimization)"""
+        current_task_count = len(self.task_manager.tasks)
+        
+        # Only refresh if task count changed or forced
+        if not force and current_task_count == self._last_task_count:
+            return
+            
+        self._last_task_count = current_task_count
+        
         # Clear all columns
         self.todo_column.clear_tasks()
         self.doing_column.clear_tasks()
@@ -356,14 +369,17 @@ class TodoApp(App):
         self.push_screen(NewTaskScreen())
     
     def action_focus_board(self) -> None:
-        """Focus on the main board (escape from modals)"""
-        # This will be handled by modal screens
-        pass
+        """Focus on the main board (escape from modals), or quit if no modals are open"""
+        # Check if there are any modal screens active
+        if len(self.screen_stack) <= 1:
+            # No modals are open, so quit the application
+            self.exit()
+        # If modals are open, this action will be handled by the modal screens themselves
     
     def action_toggle_sort(self) -> None:
         """Toggle between priority and date sorting"""
         self.sort_by_priority = not self.sort_by_priority
-        self.refresh_tasks()
+        self.refresh_tasks(force=True)
         sort_type = "priority" if self.sort_by_priority else "date"
         self.notify(f"Sorting by {sort_type}")
 
