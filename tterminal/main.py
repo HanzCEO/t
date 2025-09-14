@@ -18,17 +18,17 @@ class TaskWidget(Static):
     
     def __init__(self, task: Task, **kwargs):
         super().__init__(**kwargs)
-        self.task = task
+        self.task_data = task
         self.can_focus = True
     
     def render(self) -> str:
         """Render the task"""
-        priority_indicator = "●" if self.task.priority != Priority.NOT_URGENT_NOT_IMPORTANT else "○"
-        return f"[{self.task.priority.color}]{priority_indicator}[/] {self.task.title}"
+        priority_indicator = "●" if self.task_data.priority != Priority.NOT_URGENT_NOT_IMPORTANT else "○"
+        return f"[{self.task_data.priority.color}]{priority_indicator}[/] {self.task_data.title}"
     
     def on_click(self) -> None:
         """Handle task click for editing"""
-        self.app.push_screen(EditTaskScreen(self.task))
+        self.app.push_screen(EditTaskScreen(task=self.task_data))
 
 
 class KanbanColumn(Container):
@@ -68,11 +68,11 @@ class NewTaskScreen(ModalScreen[Task]):
     
     def compose(self) -> ComposeResult:
         """Compose the new task screen"""
-        with Vertical(classes="modal"):
+        with Container(classes="modal"):
             yield Static("[bold]Create New Task[/]", classes="modal-title")
             yield Input(placeholder="Task title (required)", id="title-input")
             yield Static("Description:")
-            yield TextArea("", placeholder="Optional task description", id="description-input")
+            yield TextArea("", id="description-input")
             yield Static("[bold]Priority (Eisenhower Matrix)[/]")
             yield Select([
                 ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
@@ -133,7 +133,7 @@ class EditTaskScreen(ModalScreen[Task]):
     
     def compose(self) -> ComposeResult:
         """Compose the edit task screen"""
-        with Vertical(classes="modal"):
+        with Container(classes="modal"):
             yield Static("[bold]Edit Task[/]", classes="modal-title")
             yield Input(value=self.task.title, id="title-input")
             yield Static("Description:")
@@ -153,7 +153,7 @@ class EditTaskScreen(ModalScreen[Task]):
             ], id="status-select", value=self.task.status)
             with Horizontal(classes="modal-buttons"):
                 yield Button("Save", variant="primary", id="save-button")
-                yield Button("Delete", variant="error", id="delete-button") 
+                yield Button("Delete", variant="error", id="delete-button")
                 yield Button("Cancel", variant="default", id="cancel-button")
     
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -251,36 +251,6 @@ class TodoApp(App):
         background: $warning 10%;
     }
     
-    /* Modal styles */
-    ModalScreen {
-        align: center middle;
-    }
-    
-    .modal {
-        width: 80;
-        height: auto;
-        max-height: 80%;
-        background: $panel;
-        border: thick $primary;
-        padding: 2;
-    }
-    
-    .modal-title {
-        text-align: center;
-        color: $primary;
-        margin-bottom: 1;
-    }
-    
-    .modal-buttons {
-        margin-top: 1;
-        height: auto;
-    }
-    
-    .modal-buttons Button {
-        width: 1fr;
-        margin: 0 1;
-    }
-    
     /* Form elements */
     Input, TextArea, Select {
         margin: 1 0;
@@ -338,6 +308,10 @@ class TodoApp(App):
             return
             
         self._last_task_count = current_task_count
+        
+        # Check if columns exist (app might not be fully mounted yet)
+        if not hasattr(self, 'todo_column') or not hasattr(self, 'doing_column') or not hasattr(self, 'done_column'):
+            return
         
         # Clear all columns
         self.todo_column.clear_tasks()
