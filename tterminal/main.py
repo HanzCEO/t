@@ -27,7 +27,7 @@ class TaskWidget(Static):
         priority_indicator = "●" if self.task_data.priority != Priority.NOT_URGENT_NOT_IMPORTANT else "○"
         
         # Format task with optional deadline
-        task_text = f"[{self.task_data.priority.color}]{priority_indicator}[/] {self.task_data.title}"
+        task_text = f"[{self.task_data.priority.color}]{priority_indicator}[/{self.task_data.priority.color}] {self.task_data.title}"
         
         # Add deadline info if present
         if self.task_data.deadline:
@@ -35,12 +35,12 @@ class TaskWidget(Static):
             # Check if deadline is soon (within 3 days) or overdue
             days_until = (self.task_data.deadline.date() - datetime.now().date()).days
             if days_until < 0:
-                deadline_str = f"[red]⚠{deadline_str}[/]"  # Overdue
+                deadline_str = f"[red]⚠{deadline_str}[/red]"  # Overdue
             elif days_until <= 3:
-                deadline_str = f"[yellow]{deadline_str}[/]"  # Due soon
+                deadline_str = f"[yellow]{deadline_str}[/yellow]"  # Due soon
             else:
-                deadline_str = f"[dim]{deadline_str}[/]"  # Normal
-            task_text += f" [{deadline_str}]"
+                deadline_str = f"[dim]{deadline_str}[/dim]"  # Normal
+            task_text += f" {deadline_str}"
         
         return task_text
     
