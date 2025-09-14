@@ -1,0 +1,101 @@
+/* Main application styles */
+
+Screen {
+    background: $surface;
+}
+
+#kanban-board {
+    padding: 1;
+    height: 100%;
+}
+
+.kanban-column {
+    border: solid $primary;
+    width: 1fr;
+    margin: 0 1;
+    padding: 1;
+    background: $panel;
+}
+
+.column-header {
+    text-align: center;
+    background: $primary;
+    color: $text;
+    padding: 1;
+    margin-bottom: 1;
+}
+
+.task-container {
+    height: 100%;
+    overflow-y: auto;
+}
+
+.task-item {
+    border: solid $secondary;
+    margin: 1 0;
+    padding: 1;
+    background: $surface;
+    color: $text;
+}
+
+.task-item:hover {
+    background: $accent;
+    border: solid $accent;
+}
+
+.task-item:focus {
+    border: solid $warning;
+    background: $warning 10%;
+}
+
+/* Modal styles */
+.modal {
+    width: 60;
+    height: auto;
+    background: $panel;
+    border: thick $primary;
+    padding: 2;
+}
+
+.modal-title {
+    text-align: center;
+    color: $primary;
+    margin-bottom: 1;
+}
+
+.modal-buttons {
+    margin-top: 1;
+    height: auto;
+}
+
+.modal-buttons Button {
+    width: 1fr;
+    margin: 0 1;
+}
+
+/* Form elements */
+Input, TextArea, Select {
+    margin: 1 0;
+}
+
+TextArea {
+    height: 5;
+    max-height: 10;
+}
+
+/* Priority indicators with colors */
+.priority-urgent-important {
+    color: red;
+}
+
+.priority-important {
+    color: orange;  
+}
+
+.priority-urgent {
+    color: yellow;
+}
+
+.priority-neither {
+    color: green;
+}
