@@ -129,28 +129,28 @@ class EditTaskScreen(ModalScreen[Task]):
     
     def __init__(self, task: Task, **kwargs):
         super().__init__(**kwargs)
-        self.task = task
+        self._task_obj = task
     
     def compose(self) -> ComposeResult:
         """Compose the edit task screen"""
         with Container(classes="modal"):
             yield Static("[bold]Edit Task[/]", classes="modal-title")
-            yield Input(value=self.task.title, id="title-input")
+            yield Input(value=self._task_obj.title, id="title-input")
             yield Static("Description:")
-            yield TextArea(self.task.description, id="description-input")
+            yield TextArea(self._task_obj.description, id="description-input")
             yield Static("[bold]Priority[/]")
             yield Select([
                 ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
                 ("Important, Not Urgent (Schedule)", Priority.NOT_URGENT_IMPORTANT), 
                 ("Urgent, Not Important (Delegate)", Priority.URGENT_NOT_IMPORTANT),
                 ("Not Urgent, Not Important (Eliminate)", Priority.NOT_URGENT_NOT_IMPORTANT)
-            ], id="priority-select", value=self.task.priority)
+            ], id="priority-select", value=self._task_obj.priority)
             yield Static("[bold]Status[/]")
             yield Select([
                 ("Todo", Status.TODO),
                 ("Doing", Status.DOING),
                 ("Done", Status.DONE)
-            ], id="status-select", value=self.task.status)
+            ], id="status-select", value=self._task_obj.status)
             with Horizontal(classes="modal-buttons"):
                 yield Button("Save", variant="primary", id="save-button")
                 yield Button("Delete", variant="error", id="delete-button")
@@ -178,7 +178,7 @@ class EditTaskScreen(ModalScreen[Task]):
         
         # Update the task
         self.app.task_manager.update_task(
-            self.task.id,
+            self._task_obj.id,
             title=title,
             description=description_input.text.strip(),
             priority=priority_select.value,
@@ -192,7 +192,7 @@ class EditTaskScreen(ModalScreen[Task]):
     
     def delete_task(self):
         """Delete the task"""
-        self.app.task_manager.delete_task(self.task.id)
+        self.app.task_manager.delete_task(self._task_obj.id)
         self.app.refresh_tasks(force=True)
         self.dismiss()
 
