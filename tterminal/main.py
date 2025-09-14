@@ -45,7 +45,11 @@ class TaskWidget(Static):
         return task_text
     
     def on_click(self) -> None:
-        """Handle task click for editing"""
+        """Handle task click for selection"""
+        self.focus()
+    
+    def on_double_click(self) -> None:
+        """Handle task double-click for editing"""
         self.app.push_screen(EditTaskScreen(task=self.task_data))
 
 
@@ -60,8 +64,9 @@ class KanbanColumn(Container):
     
     def compose(self) -> ComposeResult:
         """Compose the column"""
-        yield Static(f"[bold]{self.title}[/]", classes="column-header")
-        yield Container(id=f"tasks-{self.status.value}", classes="task-container")
+        with Container(classes="column-content"):
+            yield Static(f"[bold]{self.title}[/]", classes="column-title")
+            yield Container(id=f"tasks-{self.status.value}", classes="task-container")
     
     def add_task(self, task: Task):
         """Add a task to this column"""
@@ -264,16 +269,20 @@ class TodoApp(App):
         border: solid $primary;
         width: 1fr;
         margin: 0 1;
-        padding: 1;
+        padding: 0;
         background: $panel;
     }
     
-    .column-header {
-        text-align: center;
-        background: $primary;
-        color: $text;
+    .column-content {
+        height: 100%;
         padding: 1;
-        margin-bottom: 1;
+    }
+    
+    .column-title {
+        text-align: center;
+        color: $primary;
+        padding: 0 0 1 0;
+        margin: 0;
     }
     
     .task-container {
