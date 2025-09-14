@@ -59,7 +59,7 @@ class KanbanColumn(Container):
         self.tasks.clear()
 
 
-class NewTaskScreen(Screen[Task]):
+class NewTaskScreen(ModalScreen[Task]):
     """Screen for creating a new task"""
     
     BINDINGS = [
@@ -68,19 +68,21 @@ class NewTaskScreen(Screen[Task]):
     
     def compose(self) -> ComposeResult:
         """Compose the new task screen"""
-        yield Static("[bold]Create New Task[/]")
-        yield Input(placeholder="Task title (required)", id="title-input")
-        yield Static("Description:")
-        yield TextArea("", placeholder="Optional task description", id="description-input")
-        yield Static("[bold]Priority (Eisenhower Matrix)[/]")
-        yield Select([
-            ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
-            ("Important, Not Urgent (Schedule)", Priority.NOT_URGENT_IMPORTANT), 
-            ("Urgent, Not Important (Delegate)", Priority.URGENT_NOT_IMPORTANT),
-            ("Not Urgent, Not Important (Eliminate)", Priority.NOT_URGENT_NOT_IMPORTANT)
-        ], id="priority-select", value=Priority.NOT_URGENT_NOT_IMPORTANT)
-        yield Button("Create", variant="primary", id="create-button")
-        yield Button("Cancel", variant="default", id="cancel-button")
+        with Container(classes="modal"):
+            yield Static("[bold]Create New Task[/]", classes="modal-title")
+            yield Input(placeholder="Task title (required)", id="title-input")
+            yield Static("Description:")
+            yield TextArea("", id="description-input")
+            yield Static("[bold]Priority (Eisenhower Matrix)[/]")
+            yield Select([
+                ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
+                ("Important, Not Urgent (Schedule)", Priority.NOT_URGENT_IMPORTANT), 
+                ("Urgent, Not Important (Delegate)", Priority.URGENT_NOT_IMPORTANT),
+                ("Not Urgent, Not Important (Eliminate)", Priority.NOT_URGENT_NOT_IMPORTANT)
+            ], id="priority-select", value=Priority.NOT_URGENT_NOT_IMPORTANT)
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Create", variant="primary", id="create-button")
+                yield Button("Cancel", variant="default", id="cancel-button")
     
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses"""
@@ -118,7 +120,7 @@ class NewTaskScreen(Screen[Task]):
         self.dismiss()
 
 
-class EditTaskScreen(Screen[Task]):
+class EditTaskScreen(ModalScreen[Task]):
     """Screen for editing an existing task"""
     
     BINDINGS = [
@@ -131,26 +133,28 @@ class EditTaskScreen(Screen[Task]):
     
     def compose(self) -> ComposeResult:
         """Compose the edit task screen"""
-        yield Static("[bold]Edit Task[/]")
-        yield Input(value=self.task.title, id="title-input")
-        yield Static("Description:")
-        yield TextArea(self.task.description, id="description-input")
-        yield Static("[bold]Priority[/]")
-        yield Select([
-            ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
-            ("Important, Not Urgent (Schedule)", Priority.NOT_URGENT_IMPORTANT), 
-            ("Urgent, Not Important (Delegate)", Priority.URGENT_NOT_IMPORTANT),
-            ("Not Urgent, Not Important (Eliminate)", Priority.NOT_URGENT_NOT_IMPORTANT)
-        ], id="priority-select", value=self.task.priority)
-        yield Static("[bold]Status[/]")
-        yield Select([
-            ("Todo", Status.TODO),
-            ("Doing", Status.DOING),
-            ("Done", Status.DONE)
-        ], id="status-select", value=self.task.status)
-        yield Button("Save", variant="primary", id="save-button")
-        yield Button("Delete", variant="error", id="delete-button")
-        yield Button("Cancel", variant="default", id="cancel-button")
+        with Container(classes="modal"):
+            yield Static("[bold]Edit Task[/]", classes="modal-title")
+            yield Input(value=self.task.title, id="title-input")
+            yield Static("Description:")
+            yield TextArea(self.task.description, id="description-input")
+            yield Static("[bold]Priority[/]")
+            yield Select([
+                ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
+                ("Important, Not Urgent (Schedule)", Priority.NOT_URGENT_IMPORTANT), 
+                ("Urgent, Not Important (Delegate)", Priority.URGENT_NOT_IMPORTANT),
+                ("Not Urgent, Not Important (Eliminate)", Priority.NOT_URGENT_NOT_IMPORTANT)
+            ], id="priority-select", value=self.task.priority)
+            yield Static("[bold]Status[/]")
+            yield Select([
+                ("Todo", Status.TODO),
+                ("Doing", Status.DOING),
+                ("Done", Status.DONE)
+            ], id="status-select", value=self.task.status)
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Save", variant="primary", id="save-button")
+                yield Button("Delete", variant="error", id="delete-button")
+                yield Button("Cancel", variant="default", id="cancel-button")
     
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses"""
