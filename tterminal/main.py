@@ -54,19 +54,18 @@ class TaskWidget(Static):
 
 
 class KanbanColumn(Container):
-    """A column in the kanban board"""
+    """A column in the kanban board with title embedded in border"""
     
     def __init__(self, title: str, status: Status, **kwargs):
         super().__init__(**kwargs)
         self.title = title
         self.status = status
         self.tasks: List[TaskWidget] = []
+        self.border_title = title
     
     def compose(self) -> ComposeResult:
         """Compose the column"""
-        with Container(classes="column-content"):
-            yield Static(f"[bold]{self.title}[/]", classes="column-title")
-            yield Container(id=f"tasks-{self.status.value}", classes="task-container")
+        yield Container(id=f"tasks-{self.status.value}", classes="task-container")
     
     def add_task(self, task: Task):
         """Add a task to this column"""
@@ -269,20 +268,8 @@ class TodoApp(App):
         border: solid $primary;
         width: 1fr;
         margin: 0 1;
-        padding: 0;
-        background: $panel;
-    }
-    
-    .column-content {
-        height: 100%;
         padding: 1;
-    }
-    
-    .column-title {
-        text-align: center;
-        color: $primary;
-        padding: 0 0 1 0;
-        margin: 0;
+        background: $panel;
     }
     
     .task-container {
@@ -315,6 +302,10 @@ class TodoApp(App):
         opacity: 80%;
     }
     
+    .kanban-column:focus-within {
+        border: solid $warning;
+    }
+    
     /* Form elements */
     Input, TextArea, Select {
         margin: 1 0;
@@ -335,6 +326,10 @@ class TodoApp(App):
         Binding("s", "toggle_sort", "Toggle Sort"),
         Binding("left", "move_task_left", "Move Left"),
         Binding("right", "move_task_right", "Move Right"),
+        Binding("up", "navigate_up", "Select Previous Task"),
+        Binding("down", "navigate_down", "Select Next Task"),
+        Binding("comma", "previous_column", "Previous Column"),
+        Binding("period", "next_column", "Next Column"),
     ]
     
     def __init__(self, **kwargs):
@@ -342,6 +337,8 @@ class TodoApp(App):
         self.task_manager = TaskManager()
         self.sort_mode = "priority"  # "priority", "date", "deadline"
         self._last_task_count = 0  # Cache for performance
+        self.current_column_index = 0  # Track current column (0=TODO, 1=DOING, 2=DONE)
+        self.current_task_index = 0   # Track current task in column
     
     def compose(self) -> ComposeResult:
         """Compose the main application"""
@@ -353,6 +350,11 @@ class TodoApp(App):
             self.doing_column = KanbanColumn("⚡ DOING", Status.DOING, classes="kanban-column")
             self.done_column = KanbanColumn("✅ DONE", Status.DONE, classes="kanban-column")
             
+            # Set border titles for each column
+            self.todo_column.border_title = "📝 TODO"
+            self.doing_column.border_title = "⚡ DOING"
+            self.done_column.border_title = "✅ DONE"
+            
             yield self.todo_column
             yield self.doing_column  
             yield self.done_column
@@ -360,6 +362,15 @@ class TodoApp(App):
     def on_mount(self) -> None:
         """Called when app is mounted"""
         self.refresh_tasks()
+        # Initialize focus on the first column
+        self.call_after_refresh(self.initialize_focus)
+    
+    def initialize_focus(self):
+        """Initialize focus on startup"""
+        if self.todo_column.tasks:
+            self.focus_current_task()
+        else:
+            self.todo_column.focus()
     
     def on_unmount(self) -> None:
         """Called when app is unmounted - ensure data is saved"""
@@ -405,6 +416,11 @@ class TodoApp(App):
             elif status == Status.DONE:
                 for task in tasks:
                     self.done_column.add_task(task)
+        
+        # Reset task index if current column has no tasks or index is out of bounds
+        current_column = self.get_current_column()
+        if not current_column.tasks or self.current_task_index >= len(current_column.tasks):
+            self.current_task_index = max(0, len(current_column.tasks) - 1)
     
     def action_new_task(self) -> None:
         """Create a new task"""
@@ -463,6 +479,55 @@ class TodoApp(App):
                 self.task_manager.update_task(task.id, status=new_status)
                 self.refresh_tasks(force=True)
                 self.notify(f"Moved '{task.title}' to {new_status.value.upper()}")
+    
+    def get_current_column(self) -> KanbanColumn:
+        """Get the currently selected column"""
+        columns = [self.todo_column, self.doing_column, self.done_column]
+        return columns[self.current_column_index]
+    
+    def get_columns(self) -> List[KanbanColumn]:
+        """Get all columns"""
+        return [self.todo_column, self.doing_column, self.done_column]
+    
+    def focus_current_task(self):
+        """Focus the current task in the current column"""
+        current_column = self.get_current_column()
+        if current_column.tasks and 0 <= self.current_task_index < len(current_column.tasks):
+            current_column.tasks[self.current_task_index].focus()
+    
+    def action_navigate_up(self) -> None:
+        """Navigate to previous task in current column"""
+        current_column = self.get_current_column()
+        if current_column.tasks:
+            self.current_task_index = max(0, self.current_task_index - 1)
+            self.focus_current_task()
+    
+    def action_navigate_down(self) -> None:
+        """Navigate to next task in current column"""
+        current_column = self.get_current_column()
+        if current_column.tasks:
+            self.current_task_index = min(len(current_column.tasks) - 1, self.current_task_index + 1)
+            self.focus_current_task()
+    
+    def action_previous_column(self) -> None:
+        """Navigate to previous column"""
+        self.current_column_index = (self.current_column_index - 1) % 3
+        self.current_task_index = 0  # Reset task selection
+        current_column = self.get_current_column()
+        if current_column.tasks:
+            self.focus_current_task()
+        else:
+            current_column.focus()
+    
+    def action_next_column(self) -> None:
+        """Navigate to next column"""
+        self.current_column_index = (self.current_column_index + 1) % 3
+        self.current_task_index = 0  # Reset task selection
+        current_column = self.get_current_column()
+        if current_column.tasks:
+            self.focus_current_task()
+        else:
+            current_column.focus()
 
 
 def main():
