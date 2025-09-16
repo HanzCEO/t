@@ -13,16 +13,20 @@ Screen {
     border: solid $primary;
     width: 1fr;
     margin: 0 1;
-    padding: 1;
+    padding: 0;
     background: $panel;
 }
 
-.column-header {
-    text-align: center;
-    background: $primary;
-    color: $text;
+.column-content {
+    height: 100%;
     padding: 1;
-    margin-bottom: 1;
+}
+
+.column-title {
+    text-align: center;
+    color: $primary;
+    padding: 0 0 1 0;
+    margin: 0;
 }
 
 .task-container {
@@ -32,10 +36,11 @@ Screen {
 
 .task-item {
     border: solid $secondary;
-    margin: 1 0;
-    padding: 1;
+    margin: 0 0 1 0;
+    padding: 0 1;
     background: $surface;
     color: $text;
+    height: 3;
 }
 
 .task-item:hover {
@@ -46,6 +51,12 @@ Screen {
 .task-item:focus {
     border: solid $warning;
     background: $warning 10%;
+}
+
+.task-item.dragging {
+    background: $primary 20%;
+    border: solid $primary;
+    opacity: 80%;
 }
 
 /* Modal styles */

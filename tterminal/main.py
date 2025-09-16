@@ -3,6 +3,7 @@ Main TUI application using Textual
 """
 
 import uuid
+from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Header, Footer, Static, Button, Input, TextArea, Select
@@ -24,25 +25,48 @@ class TaskWidget(Static):
     def render(self) -> str:
         """Render the task"""
         priority_indicator = "●" if self.task_data.priority != Priority.NOT_URGENT_NOT_IMPORTANT else "○"
-        return f"[{self.task_data.priority.color}]{priority_indicator}[/] {self.task_data.title}"
+        
+        # Format task with optional deadline
+        task_text = f"[{self.task_data.priority.color}]{priority_indicator}[/{self.task_data.priority.color}] {self.task_data.title}"
+        
+        # Add deadline info if present
+        if self.task_data.deadline:
+            deadline_str = self.task_data.deadline.strftime("%m/%d")
+            # Check if deadline is soon (within 3 days) or overdue
+            days_until = (self.task_data.deadline.date() - datetime.now().date()).days
+            if days_until < 0:
+                deadline_str = f"[red]⚠{deadline_str}[/red]"  # Overdue
+            elif days_until <= 3:
+                deadline_str = f"[yellow]{deadline_str}[/yellow]"  # Due soon
+            else:
+                deadline_str = f"[dim]{deadline_str}[/dim]"  # Normal
+            task_text += f" {deadline_str}"
+        
+        return task_text
     
     def on_click(self) -> None:
-        """Handle task click for editing"""
-        self.app.push_screen(EditTaskScreen(task=self.task_data))
+        """Handle task click for selection"""
+        self.focus()
+    
+    def on_key(self, event) -> None:
+        """Handle key presses on task"""
+        if event.key == "enter":
+            self.app.push_screen(EditTaskScreen(task=self.task_data))
+            event.prevent_default()
 
 
 class KanbanColumn(Container):
-    """A column in the kanban board"""
+    """A column in the kanban board with title embedded in border"""
     
     def __init__(self, title: str, status: Status, **kwargs):
         super().__init__(**kwargs)
         self.title = title
         self.status = status
         self.tasks: List[TaskWidget] = []
+        self.border_title = title
     
     def compose(self) -> ComposeResult:
         """Compose the column"""
-        yield Static(f"[bold]{self.title}[/]", classes="column-header")
         yield Container(id=f"tasks-{self.status.value}", classes="task-container")
     
     def add_task(self, task: Task):
@@ -73,6 +97,8 @@ class NewTaskScreen(ModalScreen[Task]):
             yield Input(placeholder="Task title (required)", id="title-input")
             yield Static("Description:")
             yield TextArea("", id="description-input")
+            yield Static("Deadline (optional, YYYY-MM-DD):")
+            yield Input(placeholder="2024-12-31", id="deadline-input")
             yield Static("[bold]Priority (Eisenhower Matrix)[/]")
             yield Select([
                 ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
@@ -95,6 +121,7 @@ class NewTaskScreen(ModalScreen[Task]):
         """Create a new task"""
         title_input = self.query_one("#title-input", Input)
         description_input = self.query_one("#description-input", TextArea)
+        deadline_input = self.query_one("#deadline-input", Input)
         priority_select = self.query_one("#priority-select", Select)
         
         title = title_input.value.strip()
@@ -104,11 +131,22 @@ class NewTaskScreen(ModalScreen[Task]):
         description = description_input.text.strip()
         priority = priority_select.value
         
+        # Parse deadline if provided
+        deadline = None
+        deadline_str = deadline_input.value.strip()
+        if deadline_str:
+            try:
+                deadline = datetime.strptime(deadline_str, "%Y-%m-%d")
+            except ValueError:
+                # Invalid date format, ignore it
+                pass
+        
         task = Task(
             id=str(uuid.uuid4()),
             title=title,
             description=description,
-            priority=priority
+            priority=priority,
+            deadline=deadline
         )
         
         # Add to task manager
@@ -133,11 +171,15 @@ class EditTaskScreen(ModalScreen[Task]):
     
     def compose(self) -> ComposeResult:
         """Compose the edit task screen"""
+        deadline_str = self._task_obj.deadline.strftime("%Y-%m-%d") if self._task_obj.deadline else ""
+        
         with Container(classes="modal"):
             yield Static("[bold]Edit Task[/]", classes="modal-title")
             yield Input(value=self._task_obj.title, id="title-input")
             yield Static("Description:")
             yield TextArea(self._task_obj.description, id="description-input")
+            yield Static("Deadline (optional, YYYY-MM-DD):")
+            yield Input(value=deadline_str, placeholder="2024-12-31", id="deadline-input")
             yield Static("[bold]Priority[/]")
             yield Select([
                 ("Urgent & Important (Do First)", Priority.URGENT_IMPORTANT),
@@ -169,6 +211,7 @@ class EditTaskScreen(ModalScreen[Task]):
         """Save task changes"""
         title_input = self.query_one("#title-input", Input)
         description_input = self.query_one("#description-input", TextArea)
+        deadline_input = self.query_one("#deadline-input", Input)
         priority_select = self.query_one("#priority-select", Select)
         status_select = self.query_one("#status-select", Select)
         
@@ -176,13 +219,24 @@ class EditTaskScreen(ModalScreen[Task]):
         if not title:
             return  # Don't save empty titles
         
+        # Parse deadline if provided
+        deadline = None
+        deadline_str = deadline_input.value.strip()
+        if deadline_str:
+            try:
+                deadline = datetime.strptime(deadline_str, "%Y-%m-%d")
+            except ValueError:
+                # Invalid date format, keep existing deadline
+                deadline = self._task_obj.deadline
+        
         # Update the task
         self.app.task_manager.update_task(
             self._task_obj.id,
             title=title,
             description=description_input.text.strip(),
             priority=priority_select.value,
-            status=status_select.value
+            status=status_select.value,
+            deadline=deadline
         )
         
         # Refresh the main screen
@@ -220,14 +274,6 @@ class TodoApp(App):
         background: $panel;
     }
     
-    .column-header {
-        text-align: center;
-        background: $primary;
-        color: $text;
-        padding: 1;
-        margin-bottom: 1;
-    }
-    
     .task-container {
         height: 100%;
         overflow-y: auto;
@@ -235,10 +281,11 @@ class TodoApp(App):
     
     .task-item {
         border: solid $secondary;
-        margin: 1 0;
-        padding: 1;
+        margin: 0 0 1 0;
+        padding: 0 1;
         background: $surface;
         color: $text;
+        height: 3;
     }
     
     .task-item:hover {
@@ -248,7 +295,16 @@ class TodoApp(App):
     
     .task-item:focus {
         border: solid $warning;
-        background: $warning 10%;
+    }
+    
+    .task-item.dragging {
+        background: $primary 20%;
+        border: solid $primary;
+        opacity: 80%;
+    }
+    
+    .kanban-column:focus-within {
+        border: solid $warning;
     }
     
     /* Form elements */
@@ -269,13 +325,20 @@ class TodoApp(App):
         Binding("n", "new_task", "New Task"),
         Binding("escape", "focus_board", "Focus Board"),
         Binding("s", "toggle_sort", "Toggle Sort"),
+        Binding("left", "move_task_left", "Move Left"),
+        Binding("right", "move_task_right", "Move Right"),
+        Binding("up", "navigate_up", "Select Previous Task"),
+        Binding("down", "navigate_down", "Select Next Task"),
+        Binding("enter", "edit_task", "Edit Task"),
     ]
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.task_manager = TaskManager()
-        self.sort_by_priority = True  # Default sorting
+        self.sort_mode = "priority"  # "priority", "date", "deadline"
         self._last_task_count = 0  # Cache for performance
+        self.current_column_index = 0  # Track current column (0=TODO, 1=DOING, 2=DONE)
+        self.current_task_index = 0   # Track current task in column
     
     def compose(self) -> ComposeResult:
         """Compose the main application"""
@@ -287,6 +350,11 @@ class TodoApp(App):
             self.doing_column = KanbanColumn("⚡ DOING", Status.DOING, classes="kanban-column")
             self.done_column = KanbanColumn("✅ DONE", Status.DONE, classes="kanban-column")
             
+            # Set border titles for each column
+            self.todo_column.border_title = "📝 TODO"
+            self.doing_column.border_title = "⚡ DOING"
+            self.done_column.border_title = "✅ DONE"
+            
             yield self.todo_column
             yield self.doing_column  
             yield self.done_column
@@ -294,6 +362,15 @@ class TodoApp(App):
     def on_mount(self) -> None:
         """Called when app is mounted"""
         self.refresh_tasks()
+        # Initialize focus on the first column
+        self.call_after_refresh(self.initialize_focus)
+    
+    def initialize_focus(self):
+        """Initialize focus on startup"""
+        if self.todo_column.tasks:
+            self.focus_current_task()
+        else:
+            self.todo_column.focus()
     
     def on_unmount(self) -> None:
         """Called when app is unmounted - ensure data is saved"""
@@ -322,10 +399,12 @@ class TodoApp(App):
         for status in Status:
             tasks = self.task_manager.get_tasks_by_status(status)
             
-            if self.sort_by_priority:
+            if self.sort_mode == "priority":
                 tasks = self.task_manager.sort_tasks_by_priority(tasks)
-            else:
+            elif self.sort_mode == "date":
                 tasks = self.task_manager.sort_tasks_by_date(tasks)
+            elif self.sort_mode == "deadline":
+                tasks = self.task_manager.sort_tasks_by_deadline(tasks)
             
             # Add to appropriate column
             if status == Status.TODO:
@@ -337,6 +416,11 @@ class TodoApp(App):
             elif status == Status.DONE:
                 for task in tasks:
                     self.done_column.add_task(task)
+        
+        # Reset task index if current column has no tasks or index is out of bounds
+        current_column = self.get_current_column()
+        if not current_column.tasks or self.current_task_index >= len(current_column.tasks):
+            self.current_task_index = max(0, len(current_column.tasks) - 1)
     
     def action_new_task(self) -> None:
         """Create a new task"""
@@ -351,11 +435,119 @@ class TodoApp(App):
         # If modals are open, this action will be handled by the modal screens themselves
     
     def action_toggle_sort(self) -> None:
-        """Toggle between priority and date sorting"""
-        self.sort_by_priority = not self.sort_by_priority
+        """Toggle between priority, date, and deadline sorting"""
+        if self.sort_mode == "priority":
+            self.sort_mode = "date"
+        elif self.sort_mode == "date":
+            self.sort_mode = "deadline"
+        else:
+            self.sort_mode = "priority"
+        
         self.refresh_tasks(force=True)
-        sort_type = "priority" if self.sort_by_priority else "date"
-        self.notify(f"Sorting by {sort_type}")
+        self.notify(f"Sorting by {self.sort_mode}")
+    
+    def action_edit_task(self) -> None:
+        """Edit the currently focused task"""
+        focused = self.focused
+        if isinstance(focused, TaskWidget):
+            self.push_screen(EditTaskScreen(task=focused.task_data))
+    
+    def action_move_task_left(self) -> None:
+        """Move focused task to the left column"""
+        focused = self.focused
+        if isinstance(focused, TaskWidget):
+            task = focused.task_data
+            new_status = None
+            new_column_index = None
+            
+            if task.status == Status.DONE:
+                new_status = Status.DOING
+                new_column_index = 1
+            elif task.status == Status.DOING:
+                new_status = Status.TODO
+                new_column_index = 0
+            
+            if new_status:
+                self.task_manager.update_task(task.id, status=new_status)
+                
+                # Update current column index and find the task in the new column
+                old_column_index = self.current_column_index
+                self.current_column_index = new_column_index
+                
+                self.refresh_tasks(force=True)
+                
+                # Find the moved task in the new column and focus it
+                new_column = self.get_current_column()
+                for i, task_widget in enumerate(new_column.tasks):
+                    if task_widget.task_data.id == task.id:
+                        self.current_task_index = i
+                        self.focus_current_task()
+                        break
+                
+                self.notify(f"Moved '{task.title}' to {new_status.value.upper()}")
+    
+    def action_move_task_right(self) -> None:
+        """Move focused task to the right column"""
+        focused = self.focused
+        if isinstance(focused, TaskWidget):
+            task = focused.task_data
+            new_status = None
+            new_column_index = None
+            
+            if task.status == Status.TODO:
+                new_status = Status.DOING
+                new_column_index = 1
+            elif task.status == Status.DOING:
+                new_status = Status.DONE
+                new_column_index = 2
+            
+            if new_status:
+                self.task_manager.update_task(task.id, status=new_status)
+                
+                # Update current column index and find the task in the new column
+                old_column_index = self.current_column_index
+                self.current_column_index = new_column_index
+                
+                self.refresh_tasks(force=True)
+                
+                # Find the moved task in the new column and focus it
+                new_column = self.get_current_column()
+                for i, task_widget in enumerate(new_column.tasks):
+                    if task_widget.task_data.id == task.id:
+                        self.current_task_index = i
+                        self.focus_current_task()
+                        break
+                
+                self.notify(f"Moved '{task.title}' to {new_status.value.upper()}")
+    
+    def get_current_column(self) -> KanbanColumn:
+        """Get the currently selected column"""
+        columns = [self.todo_column, self.doing_column, self.done_column]
+        return columns[self.current_column_index]
+    
+    def get_columns(self) -> List[KanbanColumn]:
+        """Get all columns"""
+        return [self.todo_column, self.doing_column, self.done_column]
+    
+    def focus_current_task(self):
+        """Focus the current task in the current column"""
+        current_column = self.get_current_column()
+        if current_column.tasks and 0 <= self.current_task_index < len(current_column.tasks):
+            current_column.tasks[self.current_task_index].focus()
+    
+    def action_navigate_up(self) -> None:
+        """Navigate to previous task in current column"""
+        current_column = self.get_current_column()
+        if current_column.tasks:
+            self.current_task_index = max(0, self.current_task_index - 1)
+            self.focus_current_task()
+    
+    def action_navigate_down(self) -> None:
+        """Navigate to next task in current column"""
+        current_column = self.get_current_column()
+        if current_column.tasks:
+            self.current_task_index = min(len(current_column.tasks) - 1, self.current_task_index + 1)
+            self.focus_current_task()
 
 
 def main():
