@@ -48,9 +48,11 @@ class TaskWidget(Static):
         """Handle task click for selection"""
         self.focus()
     
-    def on_double_click(self) -> None:
-        """Handle task double-click for editing"""
-        self.app.push_screen(EditTaskScreen(task=self.task_data))
+    def on_key(self, event) -> None:
+        """Handle key presses on task"""
+        if event.key == "enter":
+            self.app.push_screen(EditTaskScreen(task=self.task_data))
+            event.prevent_default()
 
 
 class KanbanColumn(Container):
@@ -293,7 +295,6 @@ class TodoApp(App):
     
     .task-item:focus {
         border: solid $warning;
-        background: $warning 10%;
     }
     
     .task-item.dragging {
@@ -328,8 +329,7 @@ class TodoApp(App):
         Binding("right", "move_task_right", "Move Right"),
         Binding("up", "navigate_up", "Select Previous Task"),
         Binding("down", "navigate_down", "Select Next Task"),
-        Binding("comma", "previous_column", "Previous Column"),
-        Binding("period", "next_column", "Next Column"),
+        Binding("enter", "edit_task", "Edit Task"),
     ]
     
     def __init__(self, **kwargs):
@@ -446,21 +446,44 @@ class TodoApp(App):
         self.refresh_tasks(force=True)
         self.notify(f"Sorting by {self.sort_mode}")
     
+    def action_edit_task(self) -> None:
+        """Edit the currently focused task"""
+        focused = self.focused
+        if isinstance(focused, TaskWidget):
+            self.push_screen(EditTaskScreen(task=focused.task_data))
+    
     def action_move_task_left(self) -> None:
         """Move focused task to the left column"""
         focused = self.focused
         if isinstance(focused, TaskWidget):
             task = focused.task_data
             new_status = None
+            new_column_index = None
             
             if task.status == Status.DONE:
                 new_status = Status.DOING
+                new_column_index = 1
             elif task.status == Status.DOING:
                 new_status = Status.TODO
+                new_column_index = 0
             
             if new_status:
                 self.task_manager.update_task(task.id, status=new_status)
+                
+                # Update current column index and find the task in the new column
+                old_column_index = self.current_column_index
+                self.current_column_index = new_column_index
+                
                 self.refresh_tasks(force=True)
+                
+                # Find the moved task in the new column and focus it
+                new_column = self.get_current_column()
+                for i, task_widget in enumerate(new_column.tasks):
+                    if task_widget.task_data.id == task.id:
+                        self.current_task_index = i
+                        self.focus_current_task()
+                        break
+                
                 self.notify(f"Moved '{task.title}' to {new_status.value.upper()}")
     
     def action_move_task_right(self) -> None:
@@ -469,15 +492,32 @@ class TodoApp(App):
         if isinstance(focused, TaskWidget):
             task = focused.task_data
             new_status = None
+            new_column_index = None
             
             if task.status == Status.TODO:
                 new_status = Status.DOING
+                new_column_index = 1
             elif task.status == Status.DOING:
                 new_status = Status.DONE
+                new_column_index = 2
             
             if new_status:
                 self.task_manager.update_task(task.id, status=new_status)
+                
+                # Update current column index and find the task in the new column
+                old_column_index = self.current_column_index
+                self.current_column_index = new_column_index
+                
                 self.refresh_tasks(force=True)
+                
+                # Find the moved task in the new column and focus it
+                new_column = self.get_current_column()
+                for i, task_widget in enumerate(new_column.tasks):
+                    if task_widget.task_data.id == task.id:
+                        self.current_task_index = i
+                        self.focus_current_task()
+                        break
+                
                 self.notify(f"Moved '{task.title}' to {new_status.value.upper()}")
     
     def get_current_column(self) -> KanbanColumn:
@@ -508,26 +548,6 @@ class TodoApp(App):
         if current_column.tasks:
             self.current_task_index = min(len(current_column.tasks) - 1, self.current_task_index + 1)
             self.focus_current_task()
-    
-    def action_previous_column(self) -> None:
-        """Navigate to previous column"""
-        self.current_column_index = (self.current_column_index - 1) % 3
-        self.current_task_index = 0  # Reset task selection
-        current_column = self.get_current_column()
-        if current_column.tasks:
-            self.focus_current_task()
-        else:
-            current_column.focus()
-    
-    def action_next_column(self) -> None:
-        """Navigate to next column"""
-        self.current_column_index = (self.current_column_index + 1) % 3
-        self.current_task_index = 0  # Reset task selection
-        current_column = self.get_current_column()
-        if current_column.tasks:
-            self.focus_current_task()
-        else:
-            current_column.focus()
 
 
 def main():
